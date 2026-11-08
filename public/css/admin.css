@@ -1,0 +1,29 @@
+/* Painel administrativo: complementos ao sistema visual da app. */
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (min-width: 720px) { .tiles { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1000px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+.tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); text-decoration: none; transition: transform .12s; }
+.tile:hover { transform: translateY(-2px); }
+.tile b { font-size: 30px; letter-spacing: -.03em; font-weight: 750; }
+.tile.alert { background: var(--accent); color: var(--on-accent); }
+.tile.alert .muted { color: inherit; opacity: .75; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.toolbar .field { flex: 1; min-width: 180px; }
+.toolbar select, .toolbar input { height: 44px; }
+.bars { display: flex; flex-direction: column; gap: 8px; }
+.bar { display: grid; grid-template-columns: 96px 1fr 44px; gap: 10px; align-items: center; font-size: 13.5px; }
+.bar .track { height: 14px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bar .track i { display: block; height: 100%; background: var(--ink); border-radius: 999px; transform-origin: left; }
+.bar span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.cols { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
+.cols .col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; height: 100%; }
+.cols .col i { display: block; width: 100%; max-width: 28px; background: var(--ink); border-radius: 8px 8px 3px 3px; min-height: 2px; }
+.cols .col span { font-size: 10.5px; color: var(--ink-3); }
+.kv { display: grid; grid-template-columns: minmax(120px, 40%) 1fr; gap: 8px 14px; }
+.kv dt { color: var(--ink-3); font-size: 13.5px; }
+.kv dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.wide-modal .modal { width: min(100%, 640px); }
+.row-btn { text-align: left; width: 100%; background: transparent; border: 0; padding: 0; }
+.evt { display: grid; grid-template-columns: 74px 1fr; gap: 4px 10px; font-size: 13.5px; }
+.evt time { color: var(--ink-3); font-variant-numeric: tabular-nums; }

@@ -1,0 +1,22 @@
+# Environment secrets (keep committed examples if one is added later)
+.env
+.env.*
+!.env.example
+
+# Runtime state and user uploads (DATA_DIR defaults to ./data)
+/data/
+
+# Local SQLite databases and journals
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+
+# Dependencies, coverage, logs, and OS metadata
+/node_modules/
+/coverage/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
