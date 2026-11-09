@@ -1,0 +1,9 @@
+# DAMAS MZ — publicação estática do frontend no Netlify.
+# O backend não é redirecionado aqui: o frontend atual ainda chama /api/* e /ws.
+[build]
+  publish = "public"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# As rotas hash do frontend são tratadas no cliente; não é necessário reescrever /api.
