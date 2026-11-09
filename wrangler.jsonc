@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "damas-mz",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws/*", "/ws"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "damas-mz",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "preview_database_id": "local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "GAME_ROOMS", "class_name": "GameRoom" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_classes": ["GameRoom"] }
+  ],
+  "r2_buckets": [
+    { "binding": "AVATARS", "bucket_name": "damas-mz-avatars", "preview_bucket_name": "damas-mz-avatars-preview" }
+  ],
+  "vars": {
+    "STARTING_POINTS": "5000",
+    "CLOCK_MINUTES": "10",
+    "START_TIMEOUT_SECONDS": "180",
+    "REVIEW_AFTER_MINUTES": "10",
+    "QUEUE_SECONDS": "60"
+  },
+  "secrets": {
+    "required": ["ADMIN_PASSWORD", "SESSION_PEPPER"]
+  }
+}

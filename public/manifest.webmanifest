@@ -1,7 +1,7 @@
 {
   "name": "DAMAS MZ",
   "short_name": "Damas MZ",
-  "description": "Competição online de Damas Portuguesas para Moçambique, com salas, rankings e progressão virtual.",
+  "description": "Damas Portuguesas online para Moçambique (versão de demonstração).",
   "lang": "pt-PT",
   "start_url": "/",
   "display": "browser",

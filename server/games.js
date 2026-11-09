@@ -102,6 +102,7 @@ export function view(g, userId) {
     id: g.id,
     status: g.status,
     category: g.category,
+    entry: g.entry,
     you,
     turn: g.state.turn,
     board: g.state.board,
@@ -137,18 +138,24 @@ export function pushState(g) {
 }
 
 // ------------------------------------------------------------------ criar partida
-export function createGame({ whiteId, blackId, category, source = 'room', tournamentId = null, matchId = null }) {
+export function createGame({ whiteId, blackId, category, entry = 0, source = 'room', tournamentId = null, matchId = null }) {
   if (whiteId === blackId) throw new GameError('same_user', 'Não pode jogar contra si próprio.');
   const id = crypto.randomBytes(8).toString('base64url');
   tx(() => {
+    if (entry > 0) {
+      for (const uid of [whiteId, blackId]) {
+        if (points.balance(uid) < entry) throw new GameError('insufficient_points', 'Pontos demonstrativos insuficientes.');
+      }
+    }
     const now = Date.now();
     const state = E.initialState();
     q.run(
-      `INSERT INTO games(id,white_id,black_id,category,source,status,state_json,ply,clock_w,clock_b,created_at,tournament_id,match_id)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      id, whiteId, blackId, category, source, 'waiting_start', JSON.stringify(state), 0, CONFIG.clockMs, CONFIG.clockMs, now, tournamentId, matchId,
+      `INSERT INTO games(id,white_id,black_id,category,entry,source,status,state_json,ply,clock_w,clock_b,created_at,tournament_id,match_id)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      id, whiteId, blackId, category, entry, source, 'waiting_start', JSON.stringify(state), 0, CONFIG.clockMs, CONFIG.clockMs, now, tournamentId, matchId,
     );
-    logEvent(id, null, 'created', { whiteId, blackId, category, source });
+    if (entry > 0) for (const uid of [whiteId, blackId]) points.add(uid, 'ENTRADA', -entry, id, `Entrada na categoria ${category}`);
+    logEvent(id, null, 'created', { whiteId, blackId, category, entry, source });
   });
   const g = loadGame(id);
   const ips = q.all('SELECT last_ip FROM users WHERE id IN (?,?)', whiteId, blackId).map((r) => r.last_ip);
@@ -330,20 +337,12 @@ function updateRankings(g, result) {
     const dw = elo(w, b, sw);
     const db = elo(b, w, 1 - sw);
     const col = (res, me) => (res === 'd' ? 'draws' : res === me ? 'wins' : 'losses');
-    const winner = result === 'w' ? g.white_id : result === 'b' ? g.black_id : null;
-    const streak = (uid) => {
-      const row = q.get('SELECT win_streak FROM rankings WHERE user_id=? AND category=?', uid, cat);
-      return row?.win_streak || 0;
-    };
-    for (const [uid, delta, side] of [[g.white_id, dw, 'w'], [g.black_id, db, 'b']]) {
-      const nextStreak = winner === uid ? streak(uid) + 1 : 0;
-      q.run(`UPDATE rankings SET rating=rating+?, ${col(result, side)}=${col(result, side)}+1,
-        win_streak=?, best_streak=MAX(best_streak,?) WHERE user_id=? AND category=?`, delta, nextStreak, nextStreak, uid, cat);
-    }
+    q.run(`UPDATE rankings SET rating=rating+?, ${col(result, 'w')}=${col(result, 'w')}+1 WHERE user_id=? AND category=?`, dw, g.white_id, cat);
+    q.run(`UPDATE rankings SET rating=rating+?, ${col(result, 'b')}=${col(result, 'b')}+1 WHERE user_id=? AND category=?`, db, g.black_id, cat);
   }
 }
 
-/** Termina a partida: 'w' | 'b' | 'd'. Atribui XP fixo e actualiza classificações de forma idempotente. */
+/** Termina a partida: 'w' | 'b' | 'd' (empate). Liquida pontos demonstrativos e classificações. Idempotente. */
 export function finish(g, result, reason, { actorId = null } = {}) {
   if (isFinal(g)) return;
   tx(() => {
@@ -356,12 +355,9 @@ export function finish(g, result, reason, { actorId = null } = {}) {
     g.interrupted_since = null;
     if (!g.settled) {
       g.settled = 1;
-      if (result === 'd') {
-        points.award(g.white_id, 'EMPATE_XP', 10, g.id, 'XP de progressão por empate');
-        points.award(g.black_id, 'EMPATE_XP', 10, g.id, 'XP de progressão por empate');
-      } else {
-        points.award(result === 'w' ? g.white_id : g.black_id, 'VITORIA_XP', 25, g.id, 'XP de progressão por vitória');
-        points.award(result === 'w' ? g.black_id : g.white_id, 'PARTICIPACAO_XP', 5, g.id, 'XP de progressão por participação');
+      if (g.entry > 0) {
+        if (result === 'd') for (const uid of [g.white_id, g.black_id]) points.add(uid, 'REEMBOLSO_EMPATE', g.entry, g.id, 'Empate: entrada devolvida');
+        else points.add(result === 'w' ? g.white_id : g.black_id, 'PREMIO', g.entry * 2, g.id, 'Vitória (pontos demonstrativos)');
       }
       updateRankings(g, result);
     }
@@ -389,11 +385,12 @@ export function cancelGame(g, reason) {
     pauseClock(g, g.ended_at);
     if (!g.settled) {
       g.settled = 1;
+      if (g.entry > 0) for (const uid of [g.white_id, g.black_id]) points.add(uid, 'REEMBOLSO_CANCELADA', g.entry, g.id, 'Partida cancelada: entrada devolvida');
     }
     persist(g);
     logEvent(g.id, null, 'cancelled', { reason });
   });
-  for (const uid of [g.white_id, g.black_id]) notify(uid, 'game_cancelled', 'Partida cancelada: o adversário não entrou a tempo. Nenhum ponto foi alterado.', { gameId: g.id });
+  for (const uid of [g.white_id, g.black_id]) notify(uid, 'game_cancelled', 'Partida cancelada: o adversário não entrou a tempo. Entrada devolvida.', { gameId: g.id });
   pushState(g);
   live.delete(g.id); cache.delete(g.id); joined.delete(g.id);
 }

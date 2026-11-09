@@ -13,7 +13,6 @@ const SEC_KIND = {
 };
 const MENU = [
   ['dashboard', 'Dashboard', 'home', 1], ['utilizadores', 'Utilizadores', 'mine', 1], ['partidas', 'Partidas', 'swords', 1], ['salas', 'Salas', 'rooms', 1],
-  ['planos', 'Planos', 'crown', 3], ['subscricoes', 'Subscrições', 'history', 1], ['pagamentos', 'Pagamentos', 'chart', 1],
   ['torneios', 'Torneios', 'trophy', 1], ['classificacoes', 'Classificações', 'chart', 1], ['denuncias', 'Denúncias', 'alert', 1], ['seguranca', 'Segurança', 'shield', 2],
   ['relatorios', 'Relatórios', 'history', 1], ['configuracoes', 'Configurações', 'settings', 3],
 ];
@@ -101,7 +100,7 @@ const VIEWS = {
         h('div', { class: 'tiles' },
           t('Utilizadores', d.users, '#/utilizadores'), t('Online agora', d.online, '#/utilizadores'), t('Partidas em curso', d.gamesLive, '#/partidas'),
           t('Em análise', d.gamesReview, '#/partidas', true), t('Concluídas (24 h)', d.gamesDay, '#/partidas'), t('Salas abertas', d.roomsOpen, '#/salas'),
-          t('Denúncias abertas', d.reportsOpen, '#/denuncias', true), t('Subscrições ativas', d.activeSubscriptions, '#/subscricoes'), t('Pagamentos pendentes', d.pendingPayments, '#/pagamentos', true), can(2) ? t('Eventos de segurança (24 h)', d.securityDay, '#/seguranca') : null, t('Registos (24 h)', d.registeredDay, '#/utilizadores')));
+          t('Denúncias abertas', d.reportsOpen, '#/denuncias', true), can(2) ? t('Eventos de segurança (24 h)', d.securityDay, '#/seguranca') : null, t('Registos (24 h)', d.registeredDay, '#/utilizadores')));
     };
     await draw();
     const i = setInterval(() => draw().catch(() => {}), 15000);
@@ -118,13 +117,13 @@ const VIEWS = {
       for (const u of r.items) {
         list.append(h('button', { class: 'item row-btn', onclick: () => userModal(u, load) }, avatarEl(u),
           h('div', { class: 'grow' }, h('div', { class: 'row wrap' }, h('b', { text: u.username }), h('span', { class: 'dot ' + (u.online ? 'on' : '') }), u.status !== 'active' ? h('span', { class: 'chip solid', text: 'Suspenso' }) : null),
-            h('span', { class: 'small muted', text: `${u.id} · ${ROLE[u.role]} · ${u.plan.toUpperCase()} · registo ${dateOf(u.createdAt).slice(0, 10)}` })),
-          h('div', { class: 'meta' }, h('b', { class: 'num', text: String(u.rating) }), h('div', { class: 'small faint num', text: fmtPts(u.xp) + ' XP' }))));
+            h('span', { class: 'small muted', text: `${u.id} · ${ROLE[u.role]} · registo ${dateOf(u.createdAt).slice(0, 10)}` })),
+          h('div', { class: 'meta' }, h('b', { class: 'num', text: String(u.rating) }), h('div', { class: 'small faint num', text: fmtPts(u.balance) + ' pts' }))));
       }
     };
     let t;
     search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => load().catch((e) => toast(e.message, 'err')), 300); });
-    root.append(head('Utilizadores', 'Contas, plano ativo, rating e progressão XP virtual.'), h('div', { class: 'toolbar' }, h('div', { class: 'field' }, search)), list);
+    root.append(head('Utilizadores', 'Pontos demonstrativos, sem valor real.'), h('div', { class: 'toolbar' }, h('div', { class: 'field' }, search)), list);
     await load();
   },
 
@@ -150,50 +149,9 @@ const VIEWS = {
 
   async salas(root) {
     const r = await GET('/api/admin/rooms');
-    const items = r.items.length ? r.items.map((x) => {
-      const row = h('div', { class: 'item' },
-        h('div', { class: 'grow' }, h('b', { text: x.creator.username }), h('span', { class: 'small muted', text: `${CAT[x.category] || x.category} · ${x.visibility === 'private' ? 'privada' : 'pública'} · espera ${x.waitSeconds} s · ${dateOf(x.createdAt)}` })),
-        h('span', { class: 'chip', text: ROOM_STATUS[x.status] || x.status }));
-      if (can(2) && x.status === 'open') row.append(h('button', { class: 'btn sm danger', onclick: () => confirmBox('Cancelar sala', `Cancelar a sala aberta de ${x.creator.username}? A operação fica na auditoria.`, 'Cancelar', async () => !!await act(() => POST(`/api/admin/rooms/${encodeURIComponent(x.id)}/cancel`, {}), 'Sala cancelada.'), false) }, 'Cancelar'));
-      return row;
-    }) : [empty('Sem salas.')];
-    root.append(head('Salas'), h('div', { class: 'card list' }, ...items));
-  },
-
-  async planos(root) {
-    const load = async () => {
-      const r = await GET('/api/admin/plans');
-      root.replaceChildren(head('Planos', 'Preço e disponibilidade configuráveis pelo administrador.'),
-        h('div', { class: 'grid-2' }, ...r.items.map((p) => h('article', { class: 'card stack' },
-          h('div', { class: 'row between' }, h('h2', { text: p.name }), h('span', { class: 'chip', text: p.active ? 'Ativo' : 'Desativado' })),
-          h('b', { class: 'num big', text: `${fmtPts(p.priceMzn)} MT / mês` }), h('p', { class: 'small muted', text: `${p.features.length} funcionalidades configuradas.` }),
-          h('button', { class: 'btn', onclick: () => modal('Editar plano ' + p.name, (body, close) => {
-            const price = h('input', { type: 'number', min: 0, max: 1000000, value: p.priceMzn, required: true });
-            const active = h('input', { type: 'checkbox', checked: p.active });
-            body.append(h('div', { class: 'field' }, h('label', { text: 'Preço mensal em MT' }), price),
-              p.code !== 'free' ? h('label', { class: 'row' }, active, h('span', { text: 'Disponível para novas subscrições' })) : h('p', { class: 'small muted', text: 'O Gratuito permanece ativo e a 0 MT.' }),
-              h('button', { class: 'btn primary block', onclick: async () => { const result = await act(() => POST('/api/admin/plans/' + p.code, { priceMzn: Number(price.value), active: p.code === 'free' ? true : active.checked }), 'Plano atualizado.'); if (result) { close(); await load(); } } }, 'Guardar'));
-          }) }, 'Editar plano')))));
-    };
-    await load();
-  },
-
-  async subscricoes(root) {
-    const r = await GET('/api/admin/subscriptions');
-    root.append(head('Subscrições', 'Estado, validade e cancelamentos auditados.'),
-      h('div', { class: 'card list' }, ...(r.items.length ? r.items.map((s) => h('div', { class: 'item' },
-        h('div', { class: 'grow' }, h('b', { text: `${s.username} · ${s.planCode.toUpperCase()}` }), h('span', { class: 'small muted', text: `${s.status} · válida até ${dateOf(s.expiresAt)} · ${s.provider || 'sem provedor'}` })),
-        can(3) && s.status === 'active' ? h('button', { class: 'btn sm danger', onclick: () => confirmBox('Cancelar subscrição', `Cancelar ${s.planCode.toUpperCase()} de ${s.username}? A decisão ficará na auditoria.`, 'Cancelar', async () => !!await act(() => POST(`/api/admin/subscriptions/${s.id}/cancel`, {}), 'Subscrição cancelada.'), false) }, 'Cancelar') : h('span', { class: 'chip', text: s.status }))) : [empty('Sem subscrições registadas.')])),
-      h('p', { class: 'small muted', text: 'Um administrador não pode ativar subscrições manualmente. A ativação é exclusiva de confirmação válida do provedor.' }));
-  },
-
-  async pagamentos(root) {
-    const r = await GET('/api/admin/payments');
-    root.append(head('Pagamentos', r.paymentAvailable ? 'Transações e respetivas referências.' : 'Gateway não configurado; nenhuma tentativa será tratada como paga.'),
-      h('div', { class: 'card list' }, ...(r.items.length ? r.items.map((p) => h('div', { class: 'item' },
-        h('div', { class: 'grow' }, h('b', { text: `${p.username} · ${p.planCode.toUpperCase()} · ${fmtPts(p.amountMzn)} MT` }),
-          h('span', { class: 'small muted', text: `${p.provider} · ${dateOf(p.createdAt)}${p.providerRef ? ' · ref. ' + p.providerRef : ''}` })), h('span', { class: 'chip', text: p.status }))) : [empty('Sem pagamentos registados.')])),
-      h('p', { class: 'small muted', text: 'Confirmações só são aceites pelo callback assinado do provedor; não existe botão de aprovação manual.' }));
+    root.append(head('Salas'), h('div', { class: 'card list' }, ...(r.items.length ? r.items.map((x) => h('div', { class: 'item' },
+      h('div', { class: 'grow' }, h('b', { text: x.creator.username }), h('span', { class: 'small muted', text: `${CAT[x.category] || x.category} · ${fmtPts(x.entry)} pts · espera ${x.waitSeconds} s · ${dateOf(x.createdAt)}` })),
+      h('span', { class: 'chip', text: ROOM_STATUS[x.status] || x.status }))) : [empty('Sem salas.')])));
   },
 
   async torneios(root) {
@@ -210,22 +168,18 @@ const VIEWS = {
   },
 
   async classificacoes(root) {
-    let cat = 'geral'; let period = 'general';
+    let cat = 'geral';
     const box = h('div', { class: 'card list' });
     const seg = h('div', { class: 'seg' });
     const btns = Object.entries(CAT).map(([k, v]) => h('button', { type: 'button', text: v, 'aria-pressed': String(k === cat), onclick: () => { cat = k; btns.forEach((b, i) => b.setAttribute('aria-pressed', String(Object.keys(CAT)[i] === cat))); load(); } }));
     seg.append(...btns);
-    const periods = [['general', 'Geral'], ['week', 'Semanal'], ['month', 'Mensal']];
-    const periodSeg = h('div', { class: 'seg' });
-    const pbtns = periods.map(([key, label]) => h('button', { type: 'button', text: label, 'aria-pressed': String(key === period), onclick: () => { period = key; pbtns.forEach((b, i) => b.setAttribute('aria-pressed', String(periods[i][0] === period))); seg.classList.toggle('hidden', period !== 'general'); load(); } }));
-    periodSeg.append(...pbtns);
     async function load() {
-      const r = await act(() => GET(`/api/rankings?category=${cat}&period=${period}`));
+      const r = await act(() => GET('/api/rankings?category=' + cat));
       box.replaceChildren();
       if (!r?.items.length) return box.append(empty('Sem jogos nesta categoria.'));
-      for (const p of r.items) box.append(h('div', { class: 'item' }, h('b', { class: 'num', text: String(p.position).padStart(2, '0') }), h('div', { class: 'grow' }, h('b', { text: p.username }), h('span', { class: 'small muted num', text: `${p.wins}V · ${p.losses}D · ${p.draws}E · melhor sequência ${p.bestStreak || p.progression?.bestStreak || 0}` })), h('b', { class: 'num', text: period === 'general' ? String(p.rating) : `${p.score} XP` }), can(3) && period === 'general' ? h('button', { class: 'btn sm', onclick: () => ratingModal(p, load) }, 'Ajustar rating') : null));
+      for (const p of r.items) box.append(h('div', { class: 'item' }, h('b', { class: 'num', text: String(p.position).padStart(2, '0') }), h('div', { class: 'grow' }, h('b', { text: p.username }), h('span', { class: 'small muted num', text: `${p.wins}V · ${p.losses}D · ${p.draws}E` })), h('b', { class: 'num', text: String(p.rating) })));
     }
-    root.append(head('Classificações', 'Rankings gerais, semanais e mensais; ajustes manuais de rating são auditados.'), periodSeg, seg, box);
+    root.append(head('Classificações'), seg, box);
     await load();
   },
 
@@ -288,9 +242,9 @@ const VIEWS = {
       rows.length ? h('div', { class: 'cols' }, ...(() => { const m = Math.max(1, ...rows.map((r) => r.n)); return rows.map((r) => { const i = h('i', { title: String(r.n) }); i.style.height = Math.max(2, (r.n / m) * 100) + '%'; return h('div', { class: 'col' }, h('span', { class: 'num', text: String(r.n) }), i, h('span', { text: String(r.d).slice(5) })); }); })()) : empty('Sem dados.'));
     const bars = (rows, key, label, title) => h('div', { class: 'card stack' }, h('h2', { text: title }),
       rows.length ? h('div', { class: 'bars' }, ...(() => { const m = Math.max(1, ...rows.map((r) => r.n)); return rows.map((r) => { const i = h('i'); i.style.transform = `scaleX(${r.n / m})`; return h('div', { class: 'bar' }, h('span', { text: label(r[key]) }), h('div', { class: 'track' }, i), h('b', { class: 'num', text: String(r.n) })); }); })()) : empty('Sem dados.'));
-    root.append(head('Relatórios', 'Métricas de atividade, desempenho e XP exclusivamente virtual.'),
+    root.append(head('Relatórios', 'Valores demonstrativos, sem valor real.'),
       h('div', { class: 'tiles' }, h('div', { class: 'tile' }, h('span', { class: 'small muted', text: 'Lances médios por partida' }), h('b', { class: 'num', text: String(Math.round((s.avgPlies || 0) * 10) / 10) })),
-        h('div', { class: 'tile' }, h('span', { class: 'small muted', text: 'XP virtual acumulado' }), h('b', { class: 'num', text: fmtPts(s.xpInCirculation || 0) }))),
+        h('div', { class: 'tile' }, h('span', { class: 'small muted', text: 'Pontos demonstrativos em circulação' }), h('b', { class: 'num', text: fmtPts(s.pointsInCirculation || 0) }))),
       h('div', { class: 'grid-2' }, cols(s.gamesPerDay, 'Partidas por dia'), cols(s.usersPerDay, 'Registos por dia')),
       h('div', { class: 'grid-2' }, bars(s.byCategory, 'category', (k) => CAT[k] || k || 'Torneio', 'Partidas por categoria'), bars(s.byStatus, 'status', (k) => STATUS[k] || k, 'Partidas por estado')),
       bars(s.byReason, 'reason', (k) => REASON[k] || k || '—', 'Motivo de fim de partida'));
@@ -302,12 +256,10 @@ const VIEWS = {
     root.append(head('Configurações', 'Leitura da configuração do servidor (definida por variáveis de ambiente).'),
       h('div', { class: 'card stack' }, h('h2', { text: 'Regras e tempos' }), h('dl', { class: 'kv' },
         ...row('Variante de regras', c.variant), ...row('Relógio por jogador', c.clockMinutes + ' min'), ...row('Prazo para iniciar', c.startTimeoutSeconds + ' s'),
-        ...row('Análise após interrupção', c.reviewAfterMinutes + ' min'), ...row('Procura automática', c.queueSeconds + ' s'), ...row('XP virtual inicial', fmtPts(c.startingPoints)),
+        ...row('Análise após interrupção', c.reviewAfterMinutes + ' min'), ...row('Procura automática', c.queueSeconds + ' s'), ...row('Pontos iniciais (demo)', fmtPts(c.startingPoints)),
         ...row('Tolerância a quedas rápidas', Math.round(c.offlineGraceMs / 1000) + ' s'), ...row('Tempos de espera das salas', (c.waitOptions || []).join(' / ') + ' s'),
-        ...row('Categorias', (c.categories || []).map((x) => x.name).join(' · ')),
-        ...row('Planos disponíveis', (c.plans || []).filter((p) => p.active).map((p) => `${p.name} ${fmtPts(p.priceMzn)} MT`).join(' · ')),
-        ...row('Gateway de pagamentos', c.paymentAvailable ? 'Configuração encontrada; adaptador externo ainda necessário' : 'Não configurado'))),
-      h('div', { class: 'card stack' }, h('h2', { text: 'XP virtual e integração externa' }), h('p', { class: 'muted', text: 'XP não tem valor monetário, não pode ser transferido, levantado ou resgatado. A subscrição só é ativada por callback válido do provedor. Consulte docs/PAGAMENTOS_E_MIGRACOES.md para a configuração e as limitações do adaptador.' })));
+        ...row('Categorias', (c.categories || []).map((x) => `${x.name} ${fmtPts(x.entry)}`).join(' · ')))),
+      h('div', { class: 'card stack' }, h('h2', { text: 'Versão de demonstração' }), h('p', { class: 'muted', text: 'Sem apostas, pagamentos, levantamentos nem prémios resgatáveis. Os pontos são fictícios, não transferíveis e não convertíveis em dinheiro. Qualquer funcionalidade com dinheiro dependeria de análise jurídica, licenciamento e autorização dos prestadores de pagamento.' })));
   },
 };
 
@@ -315,7 +267,7 @@ const VIEWS = {
 function userModal(u, reload) {
   modal(u.username, (body, close) => {
     body.append(h('dl', { class: 'kv' }, h('dt', { text: 'ID' }), h('dd', { text: u.id }), h('dt', { text: 'Papel' }), h('dd', { text: ROLE[u.role] }), h('dt', { text: 'Estado' }), h('dd', { text: u.status === 'active' ? 'Ativo' : 'Suspenso' + (u.statusReason ? ' — ' + u.statusReason : '') }),
-      h('dt', { text: 'XP virtual' }), h('dd', { text: fmtPts(u.xp) }), h('dt', { text: 'Plano' }), h('dd', { text: u.plan.toUpperCase() }), h('dt', { text: 'Rating' }), h('dd', { text: String(u.rating) }), h('dt', { text: 'Último acesso' }), h('dd', { text: dateOf(u.lastSeen) })));
+      h('dt', { text: 'Pontos (demo)' }), h('dd', { text: fmtPts(u.balance) }), h('dt', { text: 'Pontuação' }), h('dd', { text: String(u.rating) }), h('dt', { text: 'Último acesso' }), h('dd', { text: dateOf(u.lastSeen) })));
     const acts = h('div', { class: 'stack sm' });
     if (can(2) && u.id !== me.id) {
       const susp = u.status === 'active';
@@ -324,27 +276,18 @@ function userModal(u, reload) {
     if (can(3)) {
       const role = h('select', {}, ...['user', 'support', 'moderator', 'admin'].map((r) => h('option', { value: r, text: ROLE[r], selected: r === u.role })));
       acts.append(h('div', { class: 'row' }, h('div', { class: 'field grow' }, role), h('button', { class: 'btn', onclick: async () => { if (await act(() => POST(`/api/admin/users/${u.id}/role`, { role: role.value }), 'Papel atualizado.')) { close(); reload(); } } }, 'Aplicar papel')));
-      acts.append(h('button', { class: 'btn block', onclick: () => { close(); pointsModal(u, reload); } }, 'Ajustar XP virtual'));
+      acts.append(h('button', { class: 'btn block', onclick: () => { close(); pointsModal(u, reload); } }, 'Ajustar pontos demonstrativos'));
     }
     if (!acts.children.length) acts.append(h('p', { class: 'small muted', text: 'O seu papel não permite ações sobre utilizadores.' }));
     body.append(acts);
   });
 }
 function pointsModal(u, reload) {
-  modal('Ajustar XP virtual', (body, close) => {
-    const n = h('input', { type: 'number', min: 1, max: 100000, step: '1', placeholder: 'Ex.: 500' });
+  modal('Ajustar pontos (demo)', (body, close) => {
+    const n = h('input', { type: 'number', step: '1', placeholder: 'Ex.: 500 ou -200' });
     const note = h('input', { placeholder: 'Justificação (obrigatória)', maxlength: 200 });
-    body.append(h('p', { class: 'muted', text: `${u.username}: ${fmtPts(u.xp)} XP. Ajustes são sempre positivos e ficam na auditoria.` }), h('div', { class: 'field' }, n), h('div', { class: 'field' }, note),
-      h('button', { class: 'btn primary block', onclick: async () => { if (note.value.trim().length < 3) return toast('Escreva uma justificação.', 'err'); const r = await act(() => POST(`/api/admin/users/${u.id}/points`, { amount: Number(n.value), note: note.value.trim() }), 'XP ajustado.'); if (r) { close(); reload(); } } }, 'Aplicar'));
-  });
-}
-function ratingModal(player, reload) {
-  modal('Ajustar rating de ' + player.username, (body, close) => {
-    const rating = h('input', { type: 'number', min: 0, max: 4000, value: player.rating, required: true });
-    const note = h('textarea', { rows: 3, maxlength: 200, placeholder: 'Justificação (obrigatória)' });
-    body.append(h('p', { class: 'muted', text: 'Ajuste manual do rating geral. A operação será registada na auditoria.' }),
-      h('div', { class: 'field' }, h('label', { text: 'Rating' }), rating), h('div', { class: 'field' }, h('label', { text: 'Justificação' }), note),
-      h('button', { class: 'btn primary block', onclick: async () => { const r = await act(() => POST(`/api/admin/users/${player.id}/rating`, { rating: Number(rating.value), note: note.value.trim() }), 'Rating atualizado.'); if (r) { close(); reload(); } } }, 'Guardar'));
+    body.append(h('p', { class: 'muted', text: `${u.username}: ${fmtPts(u.balance)} pontos demonstrativos. Pontos fictícios, sem valor real.` }), h('div', { class: 'field' }, n), h('div', { class: 'field' }, note),
+      h('button', { class: 'btn primary block', onclick: async () => { if (note.value.trim().length < 3) return toast('Escreva uma justificação.', 'err'); const r = await act(() => POST(`/api/admin/users/${u.id}/points`, { amount: Number(n.value), note: note.value.trim() }), 'Pontos ajustados.'); if (r) { close(); reload(); } } }, 'Aplicar'));
   });
 }
 function reportModal(x, reload) {

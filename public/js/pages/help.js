@@ -43,10 +43,10 @@ export default function help(root) {
       h('ul', {}, li('A partida não se perde. O servidor guarda a posição, as jogadas e os relógios, e o adversário é avisado.'),
         li('Os relógios param enquanto um dos jogadores estiver desligado. Ninguém ganha por perder a ligação.'),
         li('Volte quando quiser: abra o DAMAS MZ e toque em "Voltar à partida" (ou será levado para ela automaticamente). A posição, a vez e o tempo são recuperados.'),
-        li(`Se a interrupção durar mais de ${review} minutos, a partida passa a "Em análise" e a moderação decide com base no registo (vitória, empate, cancelamento ou retoma). Um cancelamento não altera o XP.`),
+        li(`Se a interrupção durar mais de ${review} minutos, a partida passa a "Em análise" e a moderação decide com base no registo (vitória, empate, cancelamento ou retoma). Se for cancelada, a entrada é devolvida.`),
         li('A tela de jogo não tem botões de desistir ou reiniciar: sair do ecrã não termina a partida.'))),
     h('div', { class: 'card rules' },
-      h('h2', { text: 'XP e progressão' }),
-      h('p', { text: 'As vitórias, empates e participações concedem XP virtual para classificação, níveis e conquistas. O XP não tem valor monetário, não é transferível e não pode ser convertido nem trocado por recompensas económicas.' })),
+      h('h2', { text: 'Pontos demonstrativos' }),
+      h('p', { text: 'Esta é uma versão de demonstração. Os pontos são fictícios, não têm valor real, não são transferíveis nem convertíveis em dinheiro. Não existem apostas, pagamentos nem levantamentos. Qualquer funcionalidade futura com dinheiro dependeria de análise jurídica, licenciamento e autorização dos prestadores de pagamento.' })),
     form));
 }

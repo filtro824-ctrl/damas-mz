@@ -1,5 +1,5 @@
 // Peças de interface partilhadas pelas páginas.
-import { h, icon } from '/js/ui.js';
+import { h, icon, fmtPts } from '/js/ui.js';
 
 export const pageHead = (title, sub, right) =>
   h('div', { class: 'page-head' }, h('div', {}, h('h1', { text: title }), sub ? h('p', { text: sub }) : null), right || null);
@@ -17,16 +17,17 @@ export function tier(n) {
   return t;
 }
 
-/** Seletor de categoria de matchmaking, sem custo ou saldo mínimo. */
-export function catPicker(categories, _balance, initial, onChange) {
+/** Seletor de categorias (Bronze 100 · Prata 250 · Ouro 500 · Diamante 1.000 — pontos demonstrativos). */
+export function catPicker(categories, balance, initial, onChange) {
   const wrap = h('div', { class: 'cats', role: 'group', 'aria-label': 'Categoria' });
   let value = initial || categories[0].id;
   const btns = new Map();
   categories.forEach((c, i) => {
     const b = h('button', {
-      type: 'button', class: 'cat', 'aria-pressed': String(c.id === value),
+      type: 'button', class: 'cat', 'aria-pressed': String(c.id === value), disabled: balance < c.entry,
+      title: balance < c.entry ? 'Pontos demonstrativos insuficientes' : '',
       onclick: () => { value = c.id; for (const [id, x] of btns) x.setAttribute('aria-pressed', String(id === value)); onChange?.(value); },
-    }, tier(i + 1), h('b', { text: c.name }), h('span', { class: 'muted small num', text: `Nível ${i + 1}` }));
+    }, tier(i + 1), h('b', { text: c.name }), h('span', { class: 'muted small num', text: `${fmtPts(c.entry)} pts` }));
     btns.set(c.id, b);
     wrap.append(b);
   });
@@ -36,4 +37,4 @@ export function catPicker(categories, _balance, initial, onChange) {
 /** Executa fn a cada ms; devolve a função que pára. */
 export function every(ms, fn) { const t = setInterval(fn, ms); return () => clearInterval(t); }
 
-export const demoNote = () => h('p', { class: 'small faint', text: 'XP e pontos virtuais servem apenas para classificação e progressão. Não têm valor monetário, não são transferíveis e não podem ser resgatados.' });
+export const demoNote = () => h('p', { class: 'small faint', text: 'Pontos demonstrativos: não têm valor real, não são transferíveis nem convertíveis em dinheiro.' });

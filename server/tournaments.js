@@ -83,7 +83,7 @@ function startRound(tid, round, ids) {
 
 function newGame(tid, matchId, whiteId, blackId, name, round) {
   q.run('UPDATE tournament_matches SET games=games+1 WHERE id=?', matchId);
-  const g = games.createGame({ whiteId, blackId, category: 'torneio', source: 'tournament', tournamentId: tid, matchId });
+  const g = games.createGame({ whiteId, blackId, category: 'torneio', entry: 0, source: 'tournament', tournamentId: tid, matchId });
   for (const uid of [whiteId, blackId]) notify(uid, 'tournament_game', `Torneio "${name}" — ronda ${round}: a sua partida está pronta.`, { gameId: g.id, tournamentId: tid });
 }
 

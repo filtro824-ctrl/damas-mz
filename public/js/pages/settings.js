@@ -25,5 +25,5 @@ export default function settings(root) {
       h('p', { class: 'muted', text: `Sessão iniciada como ${store.me.username} (ID ${store.me.id}).` }),
       h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: logout }, icon('logout'), 'Terminar sessão'), store.staff ? h('a', { class: 'btn', href: '/admin' }, icon('shield'), 'Painel administrativo') : null)),
     h('div', { class: 'card stack' }, h('h2', { text: 'Sobre' }),
-      h('p', { class: 'muted', text: 'DAMAS MZ — competição online de Damas Portuguesas (FPDJ, 2025), com XP virtual para progressão e classificações.' }))));
+      h('p', { class: 'muted', text: 'DAMAS MZ — versão de demonstração. Regras: Damas Portuguesas (FPDJ, 2025). Pontos fictícios, sem apostas nem pagamentos.' }))));
 }

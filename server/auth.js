@@ -28,7 +28,7 @@ export async function verifySecret(secret, stored) {
 }
 
 const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
-const USERNAME_RE = /^[A-Za-z0-9_.-]{3,20}$/;
+const USERNAME_RE = /^[A-Za-z0-9_.]{3,20}$/;
 
 function newPublicId() {
   for (;;) {
@@ -48,15 +48,13 @@ function validatePassword(pw) {
 }
 
 export function publicUser(u) {
-  const prof = q.get('SELECT avatar_ext, avatar_ts, theme_id, bio FROM profiles WHERE user_id=?', u.id);
+  const prof = q.get('SELECT avatar_ext, avatar_ts FROM profiles WHERE user_id=?', u.id);
   return {
     id: u.public_id,
     username: u.username,
     role: u.role,
     createdAt: u.created_at,
     avatar: prof?.avatar_ext ? `/avatars/${u.public_id}?v=${prof.avatar_ts}` : null,
-    theme: prof?.theme_id || 'classic',
-    bio: prof?.bio || '',
   };
 }
 
@@ -70,7 +68,7 @@ export function createUserRow({ username, passHash, recoveryHash, role = 'user' 
     const id = Number(r.lastInsertRowid);
     q.run('INSERT INTO profiles(user_id) VALUES(?)', id);
     q.run("INSERT INTO rankings(user_id,category) VALUES(?, 'geral')", id);
-    if (CONFIG.startingPoints > 0) points.award(id, 'XP_INICIAL', CONFIG.startingPoints, null, 'XP inicial de progressão');
+    points.add(id, 'BONUS_INICIAL', CONFIG.startingPoints, null, 'Pontos demonstrativos iniciais');
     return q.get('SELECT * FROM users WHERE id=?', id);
   });
 }
@@ -111,7 +109,7 @@ export const clearCookieHeader = () => `${COOKIE}=; Path=/; HttpOnly; SameSite=S
 
 export async function register({ username, password, ip, ua }) {
   if (!rateLimit(`reg:${ip}`, CONFIG.registerPerHour, 3600_000)) throw new AppError('rate_limited', 'Demasiados registos a partir desta rede. Tente mais tarde.', 429);
-  if (typeof username !== 'string' || !USERNAME_RE.test(username)) throw new AppError('bad_username', 'Nome de utilizador: 3 a 20 caracteres (letras, números, _ . e -).');
+  if (typeof username !== 'string' || !USERNAME_RE.test(username)) throw new AppError('bad_username', 'Nome de utilizador: 3 a 20 caracteres (letras, números, _ e .).');
   validatePassword(password);
   if (q.get('SELECT 1 x FROM users WHERE username=?', username)) throw new AppError('username_taken', 'Esse nome de utilizador já existe.', 409);
   const recoveryCode = newRecoveryCode();

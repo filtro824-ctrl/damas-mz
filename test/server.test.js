@@ -1,7 +1,6 @@
 // Testes de integração do servidor: HTTP + WebSocket reais, base de dados SQLite em memória.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,17 +9,16 @@ import * as games from '../server/games.js';
 import * as lobby from '../server/lobby.js';
 import { q } from '../server/db.js';
 import { CONFIG } from '../server/config.js';
-import * as plans from '../server/plans.js';
 
 let srv;
 let base;
 let n = 0;
 
 // ---------------------------------------------------------------- utilitários
-async function http(method, url, body, cookie, extraHeaders = {}) {
+async function http(method, url, body, cookie) {
   const res = await fetch(base + url, {
     method,
-    headers: { 'Content-Type': 'application/json', ...extraHeaders, ...(cookie ? { Cookie: cookie } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -35,18 +33,6 @@ async function newUser(name) {
   assert.equal(r.status, 200, JSON.stringify(r.json));
   const cookie = r.res.headers.get('set-cookie').split(';')[0];
   return { username, cookie, id: r.json.user.id, recoveryCode: r.json.recoveryCode };
-}
-
-function setPlan(user, code, expiresAt = Date.now() + 30 * 86400000) {
-  const row = q.get('SELECT id FROM users WHERE public_id=?', user.id);
-  const now = Date.now();
-  return Number(q.run(`INSERT INTO subscriptions(user_id,plan_code,status,starts_at,expires_at,provider,created_at,updated_at)
-    VALUES(?,?,'active',?,?,?, ?,?)`, row.id, code, now, expiresAt, 'test-fixture', now, now).lastInsertRowid);
-}
-async function adminCookie() {
-  const r = await http('POST', '/api/auth/login', { username: 'admin', password: 'admin-teste-123' });
-  assert.equal(r.status, 200);
-  return r.res.headers.get('set-cookie').split(';')[0];
 }
 
 function connect(user) {
@@ -106,16 +92,14 @@ before(async () => {
 after(async () => { await srv.close(); });
 
 // ---------------------------------------------------------------- contas e segurança básica
-test('registo devolve identificador único, código de recuperação e plano gratuito com zero XP inicial', async () => {
+test('registo devolve identificador único, código de recuperação e pontos demonstrativos', async () => {
   const u = await newUser('conta');
   assert.match(u.id, /^DM\d{6}$/);
   assert.match(u.recoveryCode, /^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/);
   const me = await http('GET', '/api/me', null, u.cookie);
-  assert.equal(me.json.balance, 0);
-  assert.equal(me.json.subscription.plan.code, 'free');
+  assert.equal(me.json.balance, CONFIG.startingPoints);
   const dup = await http('POST', '/api/auth/register', { username: u.username.toUpperCase(), password: 'senhaSegura1' });
   assert.equal(dup.status, 409);
-  assert.equal((await http('POST', '/api/auth/register', { username: 'utilizador-teste', password: 'senhaSegura1' })).status, 200);
 });
 
 test('rotas protegidas exigem sessão; palavra-passe fraca é recusada', async () => {
@@ -156,142 +140,20 @@ test('utilizador comum não acede ao painel administrativo', async () => {
   assert.ok(ev >= 1);
 });
 
-test('planos têm os preços aprovados e Gratuito não pode contornar pesquisa avançada', async () => {
-  const user = await newUser('planos');
-  const list = await http('GET', '/api/plans');
-  assert.deepEqual(list.json.items.map((p) => [p.code, p.priceMzn]), [['free', 0], ['premium', 99], ['vip', 199]]);
-  const denied = await http('POST', '/api/queue', { category: 'bronze', minRating: 900, maxRating: 1100 }, user.cookie);
-  assert.equal(denied.status, 403);
-  assert.equal(denied.json.error, 'plan_required');
-  assert.equal((await http('GET', `/api/users/${user.id}`, null, user.cookie)).json.advancedStats, false);
-  const target = await newUser('outroplan'); setPlan(target, 'premium');
-  const targetDbId = q.get('SELECT id FROM users WHERE public_id=?', target.id).id;
-  q.run("INSERT OR IGNORE INTO rankings(user_id,category) VALUES(?,'ouro')", targetDbId);
-  const hiddenStats = await http('GET', `/api/users/${target.id}`, null, user.cookie);
-  assert.equal(hiddenStats.json.advancedStats, false);
-  assert.equal(hiddenStats.json.detailedStats, null);
-  assert.equal(hiddenStats.json.rankings.some((r) => r.category === 'ouro'), false);
-  const allowedStats = await http('GET', `/api/users/${target.id}`, null, target.cookie);
-  assert.equal(allowedStats.json.advancedStats, true);
-  assert.equal(allowedStats.json.detailedStats, null);
-  assert.equal(allowedStats.json.rankings.some((r) => r.category === 'ouro'), true);
-  assert.equal((await http('POST', '/api/me/theme', { theme: 'amber' }, user.cookie)).status, 403);
-  assert.equal((await http('POST', '/api/me/bio', { bio: 'Biografia premium' }, user.cookie)).status, 403);
-  assert.equal((await http('POST', '/api/rooms', { category: 'bronze', waitSeconds: 20, title: 'Sem filtro' }, user.cookie)).status, 403);
-});
-
-test('Premium usa pesquisa avançada e cria sala pública personalizada; VIP herda esses recursos', async () => {
-  const premium = await newUser('prem'); setPlan(premium, 'premium');
-  const search = await http('POST', '/api/queue', { category: 'prata', minRating: 900, maxRating: 1100 }, premium.cookie);
-  assert.equal(search.status, 200, JSON.stringify(search.json));
-  assert.equal(search.json.searching, true);
-  await http('DELETE', '/api/queue', null, premium.cookie);
-  const room = await http('POST', '/api/rooms', { category: 'prata', waitSeconds: 30, title: 'Desafio Premium', minRating: 900, maxRating: 1100 }, premium.cookie);
-  assert.equal(room.status, 200, JSON.stringify(room.json));
-  assert.equal(room.json.room.title, 'Desafio Premium');
-  const titleOnly = await http('POST', '/api/rooms', { category: 'prata', waitSeconds: 30, title: 'Só título' }, premium.cookie);
-  assert.equal(titleOnly.status, 200, JSON.stringify(titleOnly.json));
-  assert.equal(titleOnly.json.room.minRating, null);
-  assert.equal((await http('GET', `/api/users/${premium.id}`, null, premium.cookie)).json.advancedStats, true);
-  assert.equal((await http('POST', '/api/me/theme', { theme: 'amber' }, premium.cookie)).status, 200);
-  assert.equal((await http('POST', '/api/me/bio', { bio: 'Competidor Premium' }, premium.cookie)).json.bio, 'Competidor Premium');
-  const vip = await newUser('vip'); setPlan(vip, 'vip');
-  assert.equal((await http('GET', '/api/games/mine', null, vip.cookie)).json.fullHistory, true);
-  assert.equal((await http('POST', '/api/me/theme', { theme: 'obsidian' }, vip.cookie)).status, 200);
-  const vipAchievements = (await http('GET', `/api/users/${vip.id}`, null, vip.cookie)).json.progression.achievements;
-  assert.equal(vipAchievements.some((a) => a.id === 'vip_badge'), true);
-  assert.deepEqual((await http('GET', `/api/users/${vip.id}`, null, vip.cookie)).json.detailedStats, { games: 0, wins: 0, losses: 0, draws: 0, categories: [] });
-  assert.equal((await http('POST', '/api/rooms', { category: 'bronze', waitSeconds: 20, visibility: 'private' }, premium.cookie)).status, 403);
-});
-
-test('sala VIP privada não aparece em salas públicas, exige convite e só aceita VIP', async () => {
-  const owner = await newUser('privdono'); setPlan(owner, 'vip');
-  const created = await http('POST', '/api/rooms', { category: 'bronze', waitSeconds: 30, visibility: 'private' }, owner.cookie);
-  assert.equal(created.status, 200, JSON.stringify(created.json));
-  const code = created.json.room.inviteCode;
-  assert.match(code, /^[A-Z0-9_-]{8,16}$/);
-  assert.equal((await http('GET', '/api/rooms', null, owner.cookie)).json.items.some((r) => r.id === created.json.room.id), false);
-  assert.equal((await http('GET', '/api/rooms/mine', null, owner.cookie)).json.items.find((r) => r.id === created.json.room.id).inviteCode, code);
-  const free = await newUser('privfree');
-  assert.equal((await http('POST', '/api/rooms/invite', { code }, free.cookie)).status, 403);
-  const guest = await newUser('privvip'); setPlan(guest, 'vip');
-  assert.equal((await http('POST', `/api/rooms/${created.json.room.id}/join`, {}, guest.cookie)).status, 403);
-  const joined = await http('POST', '/api/rooms/invite', { code }, guest.cookie);
-  assert.equal(joined.status, 200, JSON.stringify(joined.json));
-  assert.ok(joined.json.gameId);
-});
-
-test('subscrição expirada perde acesso e checkout não simula pagamento', async () => {
-  const user = await newUser('expplan');
-  const subId = setPlan(user, 'premium', Date.now() - 1);
-  assert.equal((await http('GET', '/api/me', null, user.cookie)).json.subscription.plan.code, 'free');
-  assert.equal(plans.expireDue() >= 1, true);
-  assert.equal(q.get('SELECT status FROM subscriptions WHERE id=?', subId).status, 'expired');
-  const original = process.env.PAYMENT_PROVIDER; process.env.PAYMENT_PROVIDER = 'unconfigured-test';
-  try {
-    const checkout = await http('POST', '/api/subscription/checkout', { planCode: 'premium' }, user.cookie);
-    assert.equal(checkout.status, 200); assert.equal(checkout.json.status, 'not_configured');
-    assert.match(checkout.json.message, /Nenhum valor foi cobrado/);
-    assert.equal((await http('GET', '/api/me', null, user.cookie)).json.subscription.plan.code, 'free');
-    assert.equal((await http('GET', '/api/payments/mine', null, user.cookie)).json.items[0].status, 'not_configured');
-  } finally { if (original === undefined) delete process.env.PAYMENT_PROVIDER; else process.env.PAYMENT_PROVIDER = original; }
-});
-
-test('callback com assinatura inválida não confirma pagamento nem ativa subscrição', async () => {
-  const user = await newUser('webhook');
-  const uid = q.get('SELECT id FROM users WHERE public_id=?', user.id).id;
-  const id = crypto.randomUUID();
-  q.run("INSERT INTO payments(id,user_id,plan_code,amount_mzn,provider,status,metadata_json,created_at) VALUES(?,?,?,?,?,'pending','{}',?)", id, uid, 'premium', 99, 'mpesa', Date.now());
-  const keys = ['PAYMENT_PROVIDER', 'PAYMENT_WEBHOOK_SECRET', 'PAYMENT_CHECKOUT_URL'];
-  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
-  process.env.PAYMENT_PROVIDER = 'mpesa'; process.env.PAYMENT_WEBHOOK_SECRET = 'test-webhook-secret'; process.env.PAYMENT_CHECKOUT_URL = 'https://gateway.invalid/';
-  try {
-    const body = { status: 'paid', paymentId: id, providerRef: 'TEST-REF' };
-    const raw = Buffer.from(JSON.stringify(body));
-    const wrong = crypto.createHmac('sha256', 'different-secret').update(raw).digest('hex');
-    const result = await http('POST', '/api/payments/webhook/mpesa', body, null, { 'X-Damas-Signature': `sha256=${wrong}` });
-    assert.equal(result.status, 401);
-    assert.equal(q.get('SELECT status FROM payments WHERE id=?', id).status, 'pending');
-    assert.equal((await http('GET', '/api/me', null, user.cookie)).json.subscription.plan.code, 'free');
-  } finally {
-    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
-  }
-});
-
-test('admin gere preço e subscrições, mas ativa pagamento apenas por confirmação do provedor', async () => {
-  const user = await newUser('subadm'); const subId = setPlan(user, 'premium');
-  const admin = await adminCookie();
-  const price = await http('POST', '/api/admin/plans/premium', { priceMzn: 123, active: true }, admin);
-  assert.equal(price.status, 200, JSON.stringify(price.json)); assert.equal(price.json.plan.priceMzn, 123);
-  assert.equal((await http('GET', '/api/admin/subscriptions', null, admin)).json.items.some((x) => x.id === subId), true);
-  assert.equal((await http('GET', '/api/admin/payments', null, admin)).status, 200);
-  const rating = await http('POST', `/api/admin/users/${user.id}/rating`, { rating: 1325, note: 'Correção após análise' }, admin);
-  assert.equal(rating.status, 200); assert.equal(rating.json.rating, 1325);
-  const room = await http('POST', '/api/rooms', { category: 'bronze', waitSeconds: 20 }, user.cookie);
-  assert.equal(room.status, 200);
-  assert.equal((await http('POST', `/api/admin/rooms/${room.json.room.id}/cancel`, {}, user.cookie)).status, 403);
-  assert.equal((await http('POST', `/api/admin/rooms/${room.json.room.id}/cancel`, {}, admin)).status, 200);
-  assert.equal((await http('GET', '/api/rooms/mine', null, user.cookie)).json.items.find((r) => r.id === room.json.room.id).status, 'cancelled');
-  assert.equal((await http('POST', `/api/admin/subscriptions/${subId}/cancel`, {}, admin)).status, 200);
-  assert.equal((await http('GET', '/api/me', null, user.cookie)).json.subscription.plan.code, 'free');
-  await http('POST', '/api/admin/plans/premium', { priceMzn: 99, active: true }, admin);
-});
-
 // ---------------------------------------------------------------- salas
-test('sala: só 20 ou 30 s; categorias não têm entradas; lista mostra criador, categoria, estado e espera', async () => {
+test('sala: só 20 ou 30 s; categorias com valores demonstrativos; lista mostra criador, categoria, valor, estado e espera', async () => {
   const a = await newUser('sala');
   assert.equal((await http('POST', '/api/rooms', { category: 'bronze', waitSeconds: 45 }, a.cookie)).status, 400);
   assert.equal((await http('POST', '/api/rooms', { category: 'platina', waitSeconds: 20 }, a.cookie)).status, 400);
   const cfg = (await http('GET', '/api/config')).json;
-  assert.deepEqual(cfg.categories.map((c) => c.name), ['Bronze', 'Prata', 'Ouro', 'Diamante']);
-  assert.ok(cfg.categories.every((c) => !Object.hasOwn(c, 'entry')));
+  assert.deepEqual(cfg.categories.map((c) => [c.name, c.entry]), [['Bronze', 100], ['Prata', 250], ['Ouro', 500], ['Diamante', 1000]]);
   assert.deepEqual(cfg.waits, [20, 30]);
   const r = await http('POST', '/api/rooms', { category: 'prata', waitSeconds: 20 }, a.cookie);
   assert.equal(r.status, 200);
   const list = (await http('GET', '/api/rooms', null, a.cookie)).json.items.find((x) => x.id === r.json.room.id);
   assert.equal(list.creator.username, a.username);
   assert.equal(list.category, 'prata');
-  assert.equal(Object.hasOwn(list, 'entry'), false);
+  assert.equal(list.entry, 250);
   assert.equal(list.status, 'open');
   assert.ok(list.remainingMs > 0 && list.remainingMs <= 20000);
 });
@@ -336,11 +198,12 @@ test('sala: 20 pedidos simultâneos, exactamente uma partida', async () => {
   assert.ok(rs.every((r) => r.status === 200 || r.status === 409));
 });
 
-test('sala pública e partida não exigem saldo nem alteram XP antes do resultado', async () => {
+test('pontos demonstrativos insuficientes impedem criar sala', async () => {
   const a = await newUser('pobre');
+  q.run("INSERT INTO ledger(user_id,kind,amount,created_at) VALUES((SELECT id FROM users WHERE public_id=?),'TESTE',-4950,?)", a.id, Date.now());
   const r = await http('POST', '/api/rooms', { category: 'ouro', waitSeconds: 20 }, a.cookie);
-  assert.equal(r.status, 200, JSON.stringify(r.json));
-  assert.equal((await http('GET', '/api/me', null, a.cookie)).json.balance, 0);
+  assert.equal(r.status, 400);
+  assert.equal(r.json.error, 'insufficient_points');
 });
 
 // ---------------------------------------------------------------- matchmaking
@@ -539,28 +402,26 @@ test('os dois desligam: partida "interrompida"; depois do prazo fica "em anális
   const res = await http('POST', `/api/admin/games/${g.gameId}/resolve`, { action: 'd', note: 'ambos sem rede' }, cookie);
   assert.equal(res.status, 200);
   assert.equal(q.get('SELECT status FROM games WHERE id=?', g.gameId).status, 'draw');
-  assert.equal((await http('GET', '/api/me', null, g.a.cookie)).json.balance, 10);
-  assert.equal((await http('GET', '/api/me', null, g.b.cookie)).json.balance, 10);
   const aud = (await http('GET', '/api/admin/audit', null, cookie)).json.items;
   assert.ok(aud.some((x) => x.action === 'game_resolve' && x.target === g.gameId));
 });
 
-test('partida não começada: se um dos jogadores nunca entra, cancela-se sem alterar XP', async () => {
+test('partida não começada: se um dos jogadores nunca entra, cancela-se e as entradas são devolvidas', async () => {
   const a = await newUser('nb1');
   const b = await newUser('nb2');
   const room = (await http('POST', '/api/rooms', { category: 'bronze', waitSeconds: 30 }, a.cookie)).json.room;
   const gameId = (await http('POST', `/api/rooms/${room.id}/join`, null, b.cookie)).json.gameId;
-  assert.equal((await http('GET', '/api/me', null, a.cookie)).json.balance, 0);
+  assert.equal((await http('GET', '/api/me', null, a.cookie)).json.balance, CONFIG.startingPoints - 100);
   q.run('UPDATE games SET created_at=? WHERE id=?', Date.now() - CONFIG.startTimeoutMs - 1000, gameId);
   games.loadGame(gameId).created_at = Date.now() - CONFIG.startTimeoutMs - 1000;
   games.tick();
   assert.equal(q.get('SELECT status FROM games WHERE id=?', gameId).status, 'cancelled');
-  assert.equal((await http('GET', '/api/me', null, a.cookie)).json.balance, 0);
-  assert.equal((await http('GET', '/api/me', null, b.cookie)).json.balance, 0);
+  assert.equal((await http('GET', '/api/me', null, a.cookie)).json.balance, CONFIG.startingPoints);
+  assert.equal((await http('GET', '/api/me', null, b.cookie)).json.balance, CONFIG.startingPoints);
 });
 
 // ---------------------------------------------------------------- relógio, fim, pontos, classificação
-test('o relógio é do servidor: tempo esgotado perde por tempo e atribui XP virtual fixo', async () => {
+test('o relógio é do servidor: tempo esgotado perde por tempo e liquida os pontos demonstrativos', async () => {
   const g = await startGame('bronze');
   const row = games.loadGame(g.gameId);
   row.clock_w = 1;
@@ -573,21 +434,14 @@ test('o relógio é do servidor: tempo esgotado perde por tempo e atribui XP vir
   assert.equal(done.reason, 'time');
   const winner = g.black.u;
   const loser = g.white.u;
-  assert.equal((await http('GET', '/api/me', null, winner.cookie)).json.balance, 25);
-  assert.equal((await http('GET', '/api/me', null, loser.cookie)).json.balance, 5);
+  assert.equal((await http('GET', '/api/me', null, winner.cookie)).json.balance, CONFIG.startingPoints + 100);
+  assert.equal((await http('GET', '/api/me', null, loser.cookie)).json.balance, CONFIG.startingPoints - 100);
   const rk = (await http('GET', '/api/rankings?category=geral', null, winner.cookie)).json.items;
   assert.equal(rk.find((r) => r.username === winner.username).wins, 1);
   // o livro-razão é separado e identifica a natureza dos movimentos
   const pts = (await http('GET', '/api/points', null, winner.cookie)).json;
-  assert.equal(pts.virtualOnly, true);
-  assert.ok(pts.ledger.some((l) => l.kind === 'VITORIA_XP'));
-  const weekly = (await http('GET', '/api/rankings?period=week', null, winner.cookie)).json.items;
-  assert.equal(weekly.find((r) => r.username === winner.username).score, 25);
-  const monthly = (await http('GET', '/api/rankings?period=month', null, loser.cookie)).json.items;
-  assert.equal(monthly.find((r) => r.username === loser.username).score, 5);
-  setPlan(winner, 'vip');
-  const detailed = (await http('GET', `/api/users/${winner.id}`, null, winner.cookie)).json.detailedStats;
-  assert.deepEqual(detailed, { games: 1, wins: 1, losses: 0, draws: 0, categories: [{ category: 'bronze', games: 1, wins: 1, losses: 0, draws: 0, averagePlies: 0 }] });
+  assert.equal(pts.demo, true);
+  assert.ok(pts.ledger.some((l) => l.kind === 'PREMIO'));
   g.ca.close(); g.cb.close();
 });
 
@@ -660,8 +514,8 @@ test('torneio gratuito: criação pelo administrador, inscrição e arranque qua
   assert.equal(d.status, 'running');
   assert.equal(d.matches.length, 2);
   assert.ok(d.matches.every((m) => m.gameId));
-  const gameColumns = q.all('PRAGMA table_info(games)').map((x) => x.name);
-  assert.equal(gameColumns.includes('entry'), false); // torneios não envolvem entradas
+  const g = q.get('SELECT entry FROM games WHERE match_id=?', d.matches[0].id);
+  assert.equal(g.entry, 0); // torneios não envolvem pontos
 });
 
 test('denúncias: validam o texto e chegam ao painel', async () => {

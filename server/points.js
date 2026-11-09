@@ -1,16 +1,14 @@
-// Pontos de progressão: XP exclusivamente virtual, sem saldo apostável ou transferências.
+// Livro-razão de pontos DEMONSTRATIVOS (VirtualPointsLedger).
+// Separado das partidas e resultados. Não está ligado a pagamentos e não existe levantamento.
 import { q } from './db.js';
 
 export function balance(userId) {
   return q.get('SELECT COALESCE(SUM(amount),0) b FROM ledger WHERE user_id=?', userId).b;
 }
 
-export function award(userId, kind, amount, gameId, note) {
-  if (!Number.isInteger(amount) || amount <= 0) throw new TypeError('XP award must be a positive integer');
+export function add(userId, kind, amount, gameId, note) {
   q.run('INSERT INTO ledger(user_id,kind,amount,game_id,note,created_at) VALUES(?,?,?,?,?,?)', userId, kind, amount, gameId ?? null, note ?? null, Date.now());
 }
-
-export const add = award;
 
 export function recent(userId, limit = 20) {
   return q.all('SELECT kind,amount,game_id,note,created_at FROM ledger WHERE user_id=? ORDER BY id DESC LIMIT ?', userId, limit)

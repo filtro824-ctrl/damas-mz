@@ -14,7 +14,6 @@ const MENU = [
   ['/minhas-salas', 'Minhas salas', 'mine'],
   ['/torneios', 'Torneios', 'trophy'],
   ['/classificacoes', 'Classificações', 'chart'],
-  ['/planos', 'Planos e subscrição', 'crown'],
   ['/perfil', 'Meu perfil', 'user'],
   ['/historico', 'Histórico de partidas', 'history'],
   ['/configuracoes', 'Configurações', 'settings'],
@@ -29,7 +28,6 @@ const ROUTES = [
   [/^\/torneios$/, 'tournaments', 'default'],
   [/^\/torneios\/(\d+)$/, 'tournaments', 'detail'],
   [/^\/classificacoes$/, 'rankings', 'default'],
-  [/^\/planos$/, 'planos', 'default'],
   [/^\/perfil$/, 'profile', 'default'],
   [/^\/historico$/, 'history', 'default'],
   [/^\/historico\/([\w-]+)$/, 'history', 'replay'],
@@ -104,7 +102,7 @@ function buildShell() {
   const drawer = h('nav', { class: 'drawer', id: 'drawer', 'aria-label': 'Menu principal', 'aria-hidden': 'true' },
     h('div', { class: 'drawer-head' }, h('a', { class: 'brand', href: '#/', onclick: () => closeMenu(false) }, brandMark(), h('span', { text: 'DAMAS MZ' })), closeBtn),
     userBox, ul,
-    h('div', { class: 'drawer-foot' }, h('div', { text: 'XP virtual sem valor monetário.' }), adminLink));
+    h('div', { class: 'drawer-foot' }, h('div', { text: 'Versão de demonstração — sem dinheiro real.' }), adminLink));
   const scrim = h('div', { class: 'scrim', onclick: () => closeMenu() });
   const main = h('main', { id: 'main', tabindex: '-1' });
 
@@ -118,7 +116,6 @@ function buildShell() {
 function renderUser() {
   if (!shell || !store.me) return;
   const u = store.me;
-  document.body.dataset.profileTheme = u.theme || 'classic';
   clear(shell.avatarHost).append(avatarEl(u));
   clear(shell.userBox).append(avatarEl(u), h('div', {}, h('b', { text: u.username }), h('span', { class: 'small faint', text: `ID ${u.id}` })));
   shell.adminLink.classList.toggle('hidden', !store.staff);

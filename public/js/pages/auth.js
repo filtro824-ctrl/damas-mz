@@ -33,7 +33,7 @@ export default function auth(root, onDone) {
     const form = h('form', { class: 'stack', novalidate: false });
     const btn = h('button', { class: 'btn primary block', type: 'submit' }, title);
     if (mode === 'login') form.append(field('Nome de utilizador', 'username', 'text', { autocomplete: 'username' }), field('Palavra-passe', 'password', 'password', { autocomplete: 'current-password' }));
-    if (mode === 'register') form.append(field('Nome de utilizador', 'username', 'text', { autocomplete: 'username', minlength: 3, maxlength: 20, hint: '3 a 20 caracteres: letras, números, ponto (.), _ e -.' }), field('Palavra-passe', 'password', 'password', { autocomplete: 'new-password', minlength: 8, hint: 'Pelo menos 8 caracteres.' }), field('Repetir palavra-passe', 'password2', 'password', { autocomplete: 'new-password', minlength: 8 }));
+    if (mode === 'register') form.append(field('Nome de utilizador', 'username', 'text', { autocomplete: 'username', minlength: 3, maxlength: 20, hint: '3 a 20 caracteres: letras, números, _ e -.' }), field('Palavra-passe', 'password', 'password', { autocomplete: 'new-password', minlength: 8, hint: 'Pelo menos 8 caracteres.' }), field('Repetir palavra-passe', 'password2', 'password', { autocomplete: 'new-password', minlength: 8 }));
     if (mode === 'recover') form.append(field('Nome de utilizador', 'username', 'text', { autocomplete: 'username' }), field('Código de recuperação', 'code', 'text', { hint: 'Formato XXXX-XXXX-XXXX-XXXX.' }), field('Nova palavra-passe', 'password', 'password', { autocomplete: 'new-password', minlength: 8 }));
     form.append(err, btn);
     form.addEventListener('submit', async (e) => {
@@ -66,7 +66,7 @@ export default function auth(root, onDone) {
     clear(card).append(
       h('div', { class: 'auth-brand' }, brandMark(), h('div', {}, h('h1', { text: 'DAMAS MZ' }), h('p', { class: 'muted', text: 'Damas online para Moçambique' }))),
       h('h2', { text: title }), form, links,
-      h('p', { class: 'small faint', text: 'O XP serve apenas para classificação e progressão. Planos pagos dependem de confirmação válida do provedor.' }));
+      h('p', { class: 'small faint', text: 'Versão de demonstração: os pontos são fictícios, sem valor real, e não há apostas nem pagamentos.' }));
     card.querySelector('input')?.focus();
   }
   draw();

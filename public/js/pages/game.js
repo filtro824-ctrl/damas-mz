@@ -129,7 +129,7 @@ export default function game(root, [id]) {
       text = opp && !opp.online ? `${opp.username} perdeu a ligação. A partida está em pausa e continua quando voltar.` : 'Partida em pausa. Continua quando os dois estiverem ligados.';
       if (g.reviewDeadline) text += ` (análise em ${left(g.reviewDeadline)})`;
     } else if (g.status === 'under_review') text = 'Partida em análise pela moderação. Nenhum jogador foi penalizado.';
-    else if (g.status === 'cancelled') text = 'Partida cancelada: o adversário não entrou a tempo. Nenhum ponto foi alterado.';
+    else if (g.status === 'cancelled') text = 'Partida cancelada: o adversário não entrou a tempo. Entrada devolvida.';
     else if (g.status === 'draw') { text = `Empate — ${REASON[g.reason] || ''}`; strong = true; }
     else if (g.status === 'finished') {
       const won = g.you && g.result === g.you;

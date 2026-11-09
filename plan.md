@@ -1,32 +1,32 @@
-# Plano de transformação — DAMAS MZ
+# Plano de migração do DAMAS MZ para Cloudflare
 
-## Base técnica encontrada
+## Implementação
 
-O arquivo recebido contém uma aplicação Node.js 22+ em módulos ES, sem dependências de terceiros: servidor HTTP e WebSocket próprio, SQLite via `node:sqlite`, interface SPA em JavaScript/CSS nativos, PWA e 48 testes existentes. O motor de Damas Portuguesas em `shared/engine.js`, autenticação e sessão em `server/auth.js`, sincronização/reconexão em `server/games.js` e o painel em `public/js/admin.js` são funcionalidades que devem ser preservadas. Não há hoje pagamentos reais, mas o fluxo de salas/partidas debita pontos como “entrada” e credita um “prémio” ao vencedor; esse fluxo é a principal lógica a retirar.
+A versão Cloudflare será um Worker Module servido por Workers Static Assets. O Worker expõe a API REST e encaminha WebSockets para Durable Objects. O D1 será a fonte persistente de contas, sessões, perfis, pontos, rankings, salas, histórico, auditoria e configurações. Cada partida terá um Durable Object nomeado pelo `gameId`; o DO mantém o estado autoritativo da partida, valida lances com o motor existente em `shared/engine.js`, persiste o snapshot e os lances no D1 e usa a API de WebSocket Hibernation para reduzir custo quando estiver ocioso. R2 será opcional para avatares; a primeira versão mantém o avatar no D1/R2 apenas quando o binding existir.
 
-## Abordagem de implementação
+A base SQLite original não será alterada nem apagada. `scripts/export-sqlite.mjs` cria um dump JSONL validado e `scripts/import-d1.mjs` aplica o dump em lotes ao D1, preservando IDs, relações e hashes. A migração SQL inicial é versionada em `migrations/0001_initial.sql`; todas as mudanças posteriores deverão ser novas migrações.
 
-1. **Jogo e economia virtual:** manter o motor, regras, autenticação, WebSocket, reconexão, denúncias e torneios gratuitos. Eliminar a entrada de pontos de salas/partidas, verificações de saldo mínimo, débitos, reembolsos e prémios proporcionais à entrada. Introduzir uma atribuição fixa de pontos de progressão por resultado, sem transferência entre jogadores nem resgate; a regra será centralizada no servidor e coberta por testes. Atualizar os textos, histórico, perfil, ajuda e painel para não expor a economia antiga.
-2. **Persistência compatível:** acrescentar migrações SQLite versionadas e executáveis em base isolada. Remover a semântica de entrada do esquema de salas/partidas; adicionar visibilidade/código de convite a salas, sequência de vitórias e eventos de classificação quando necessários, além de tabelas para planos, subscrições e tentativas/histórico de pagamento. Preservar utilizadores e resultados; transformar saldo virtual legado em saldo inicial de progressão, sem conservar transações de entrada/prémio. Nenhuma base de produção será migrada durante o desenvolvimento.
-3. **Salas e partidas:** as salas públicas e a fila aleatória passam a usar apenas categoria/rating, nunca saldo. Salas privadas serão acessíveis por código de convite e não aparecerão na lista pública. Pesquisa avançada, intervalo de rating e salas privadas/personalizadas serão autorizados no servidor conforme plano ativo. Convites serão links/códigos compartilháveis, sem exigir uma rede social de amizades inexistente no projeto.
-4. **Rankings, perfis e histórico:** estender os dados do resultado para ranking geral, semanal e mensal; mostrar rating, XP acumulado, nível, vitórias/derrotas/empates, sequência e conquistas derivadas de critérios verificáveis. Manter a lista/replay de partidas e acrescentar o histórico completo como benefício VIP, sempre com controle de acesso no backend.
-5. **Planos e pagamentos:** criar planos Free (0 MT), Premium (99 MT/mês) e VIP (199 MT/mês), com preços configuráveis pela administração. Todas as verificações de funcionalidade serão feitas no servidor e a expiração rebaixará o acesso para Free. A integração terá contrato/adaptador de provedor e endpoints preparados para M-Pesa/e-Mola, mas, sem credenciais e confirmação assinada do provedor, pedidos permanecerão pendentes/não configurados; não serão simulados pagamentos nem ativações.
-6. **Administração e interface:** preservar as telas/roles atuais e acrescentar administração de planos, subscrições, salas, partidas, rankings, estatísticas e estado/histórico de pagamentos, com trilha de auditoria. Reutilizar componentes, cores, tipografia, marca DAMAS MZ, tema claro/escuro e padrões responsivos já presentes; não aplicar template genérico.
-7. **Documentação e entrega:** atualizar README com instalação, configuração de planos, contrato/credenciais do gateway, migrações e limites externos; entregar relatório de mudanças e testes, além de ZIP do projeto atualizado.
+O servidor Node original e os 48 testes ficam preservados como referência de compatibilidade durante a transição, mas não fazem parte do caminho de produção Cloudflare. O Worker usa apenas APIs Web padrão e Cloudflare; não importa `node:sqlite`, `DatabaseSync`, caminhos locais ou armazenamento persistente local.
 
-## Estrutura do projeto
+## Estrutura
 
-- `shared/engine.js`: regras puras do jogo; manter intacto salvo necessidade comprovada.
-- `server/`: API, autenticação/autorização, partidas, salas, ranking/XP, planos/pagamentos e banco/migrações.
-- `public/js/`: SPA e páginas existentes; atualizar navegação, salas, perfil, rankings e painel administrativo.
-- `public/css/` e `public/*.html`: identidade visual e estrutura estática existentes.
-- `test/`: testes de motor e integração HTTP/WebSocket; ampliar cobrindo migrações, matchmaking, permissões, expiração e ausência de débitos/prémios por entrada.
-- `docs/`: documentação do gateway e do modelo de permissões, sem credenciais.
+- `src/index.js`: roteamento Worker, cabeçalhos, autenticação de sessão, assets e encaminhamento de WebSocket.
+- `src/db.js`: helpers assíncronos D1, transações e queries parametrizadas.
+- `src/auth.js`: hash PBKDF2 com WebCrypto, sessões opacas com hash, cookies seguros e recuperação.
+- `src/game-room.js`: Durable Object por partida, estado, presença, reconexão, relógios, idempotência e aplicação do motor.
+- `migrations/`: esquema D1 versionado.
+- `scripts/`: exportação SQLite, importação D1, verificação de integridade e relatório.
+- `public/` e `shared/`: frontend e motor existentes preservados.
+- `server/`: implementação Node legada mantida somente para regressão e fallback local explícito.
 
-## Direção de design
+## Design preservado
 
-**Movimento:** produto competitivo de xadrez/damas contemporâneo, com contenção editorial e sinais subtis de torneio. **Princípios:** preservar a marca existente; leitura rápida de rating/estado; hierarquia funcional; controles acessíveis e responsivos. **Cor:** manter os tokens e os temas claro/escuro atuais; reservar a cor de destaque da DAMAS MZ para ação primária e progressão. **Layout:** conservar cabeçalho e menu lateral móvel, com conteúdo por página, painéis compactos e listas legíveis — sem transformar o jogo num dashboard genérico. **Elementos distintivos:** marca/ícone de tabuleiro existente; chips de categoria/estado; indicadores de XP e posição. **Interação/animação:** aproveitar padrões existentes, usar transições breves e respeitar movimento reduzido; não atrasar ações de partida. **Tipografia:** manter a pilha tipográfica existente e a hierarquia já definida no CSS. **Essência da marca:** competição de Damas Portuguesas online para Moçambique, com progressão transparente e sem apostas; personalidade: competitiva, acessível e confiável. **Tom:** direto e desportivo (ex.: “Encontre um adversário à sua medida.”; “Cada partida conta para a classificação.”). **Logótipo:** preservar o wordmark e o símbolo DAMAS MZ existentes. **Cor de marca:** manter a cor própria de destaque já definida nos tokens CSS.
+A identidade visual, o frontend JavaScript/CSS, o menu, o painel administrativo e o motor de Damas Portuguesas permanecem os existentes. A única alteração de cliente necessária para produção é trocar o endpoint de WebSocket para a rota de partida Cloudflare e manter o mesmo protocolo de mensagens (`hello`, `game`, `ack`, `match`, `notice`, `error`).
 
-## Restrições e decisões de produto
+## Decisões de segurança
 
-A aplicação atual foi desenhada para uma única instância e estado de fila/presença em memória; o trabalho preservará essa implantação. A autenticação e os papéis atuais serão reutilizados. Pontos são exclusivamente progressão virtual, não moeda, saldo de aposta ou direito económico. Os preços iniciais serão os indicados no briefing, alteráveis por administrador. Integração financeira real, renovação automática e confirmação de pagamento dependem de credenciais, configuração do provedor e webhook autenticado, não fornecidos neste momento.
+Senhas nunca são armazenadas em texto simples. Sessões usam tokens aleatórios, somente o hash vai para D1 e o cookie de produção usa `HttpOnly; Secure; SameSite=None`. Mutação exige validação de `Origin`, permissões são verificadas no backend e o motor nunca aceita um caminho que não seja legal. Nenhum pagamento é simulado ou ativado.
+
+## Compatibilidade e custos
+
+A configuração usa bindings D1, Durable Objects e Workers Static Assets, sem VPS. R2 só é necessário se avatares forem habilitados em produção. IDs de conta e estados legados são preservados pelo importador; a validação gera contagens por tabela, somas de ledger, usuários sem perfil/ranking e órfãos antes de qualquer cutover.

@@ -5,7 +5,7 @@ export class ApiError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
 }
 
-export const store = { me: null, staff: false, balance: 0, rating: null, progression: null, subscription: null, activeGames: [], unread: 0, config: null, wsOpen: false };
+export const store = { me: null, staff: false, balance: 0, rating: null, activeGames: [], unread: 0, config: null, wsOpen: false };
 const bus = new EventTarget();
 export const emit = (type, detail) => bus.dispatchEvent(new CustomEvent(type, { detail }));
 export function on(type, fn) {
@@ -43,8 +43,6 @@ export function setMe(m) {
   store.staff = !!m.staff;
   store.balance = m.balance;
   store.rating = m.rating;
-  store.progression = m.progression || null;
-  store.subscription = m.subscription || null;
   store.activeGames = m.activeGames || [];
   store.unread = m.unread || 0;
   emit('me', store);

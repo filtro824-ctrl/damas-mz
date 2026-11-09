@@ -1,0 +1,7 @@
+{
+  "routes": [
+    {"path": "/", "title": "Damas MZ"},
+    {"path": "/admin", "title": "Painel administrativo"},
+    {"path": "/admin.html", "title": "Painel administrativo"}
+  ]
+}

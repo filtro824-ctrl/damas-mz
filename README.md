@@ -1,98 +1,136 @@
 # DAMAS MZ
 
-Plataforma online de competição de Damas Portuguesas para Moçambique, construída sobre o projeto fornecido. Preserva o motor e a lógica do jogo, o sistema de contas, o tempo real, a reconexão e o painel existente; acrescenta XP virtual, progressão, rankings por período, planos, personalização e salas privadas.
+Plataforma online de Damas para Moçambique. **Primeira versão funcional (demonstração)**, baseada nas
+*Regras Básicas do Jogo de Damas Portuguesas* (FPDJ, homologadas em 25/01/2025).
 
-O XP serve apenas para classificação e reconhecimento dentro da plataforma. Não tem valor monetário, não é transferível e não pode ser levantado, convertido ou trocado por recompensas económicas. As subscrições pagas são um componente separado do XP.
+> **Demonstração.** Os pontos são fictícios, não têm valor real, não são transferíveis nem convertíveis em
+> dinheiro. Não existem apostas, pagamentos nem levantamentos. Qualquer funcionalidade com dinheiro dependeria
+> de análise jurídica, licenciamento e autorização de prestadores de pagamento.
 
-## Instalação e execução
+## Como executar
 
-Requisitos: **Node.js 22.5 ou superior** (inclui `node:sqlite`). Não há dependências externas: não é necessário executar `npm install`.
+Requisitos: **Node.js 22.5 ou superior**. Não há dependências a instalar (`npm install` não é necessário).
 
 ```bash
-# Descompacte o projeto, entre na pasta e defina uma senha forte antes do primeiro arranque.
-ADMIN_PASSWORD='defina-uma-senha-forte' npm start
+cd damas-mz
+ADMIN_PASSWORD='uma-palavra-passe-forte' npm start
+# abrir http://localhost:3000        (jogo)
+# abrir http://localhost:3000/admin.html   (painel administrativo; utilizador "admin")
 ```
 
-Abra `http://localhost:3000` para jogar e `http://localhost:3000/admin.html` para o painel. Configure também `ADMIN_USERNAME` se não quiser utilizar `admin`. A conta administrativa é criada apenas se ainda não existir. Se omitir `ADMIN_PASSWORD`, o servidor gera uma senha aleatória e mostra-a uma única vez na consola do primeiro arranque; não existe credencial fixa no código.
+- A conta de administrador é criada no primeiro arranque. Sem `ADMIN_PASSWORD`, é gerada uma palavra-passe
+  aleatória e mostrada **uma só vez** na consola (não há palavra-passe fixa por omissão). Guarde-a e altere-a.
+- Para testar com duas pessoas: abra duas janelas (uma anónima), registe duas contas, crie uma sala numa e entre
+  na outra, ou use o emparelhamento automático nas duas.
+- `npm run dev` reinicia o servidor ao alterar ficheiros. `npm test` corre os testes (48).
 
-Para iniciar em desenvolvimento com reinício ao editar ficheiros: `npm run dev`. Para executar as verificações: `npm test`.
+### Variáveis de ambiente
 
-### Variáveis principais
+| Variável | Omissão | Descrição |
+|---|---|---|
+| `PORT` / `HOST` | 3000 / 0.0.0.0 | Endereço de escuta |
+| `DATA_DIR` | `./data` | Pasta da base de dados SQLite e dos avatares |
+| `DB_PATH` | (em `DATA_DIR`) | Caminho explícito da base de dados |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | admin / — | Conta de administrador principal |
+| `STARTING_POINTS` | 5000 | Pontos demonstrativos iniciais |
+| `CLOCK_MINUTES` | 10 | Tempo total por jogador |
+| `START_TIMEOUT_SECONDS` | 180 | Tempo para ambos entrarem na partida; senão é cancelada e a entrada devolvida |
+| `OFFLINE_GRACE_MS` | 4000 | Tolerância antes de contar uma desconexão (recarregar a página não conta) |
+| `REVIEW_AFTER_MINUTES` | 10 | Desconexão sem regresso → partida "Em análise" |
+| `QUEUE_SECONDS` | 60 | Tempo máximo no emparelhamento automático |
+| `TOURNAMENT_START_TIMEOUT_MINUTES` | 15 | Limite para arranque de torneios |
+| `REGISTER_LIMIT_PER_HOUR` | 10 | Registos por hora e por IP (antiabuso) |
+| `TRUST_PROXY=1` | — | Usar `X-Forwarded-For` (atrás de proxy) |
+| `COOKIE_SECURE=1` | — | Cookie de sessão só por HTTPS (**ligar em produção**) |
 
-| Variável | Omissão | Utilização |
-|---|---:|---|
-| `PORT` / `HOST` | `3000` / `0.0.0.0` | Endereço de escuta HTTP e WebSocket. |
-| `DATA_DIR` | `./data` | Pasta persistente para SQLite e avatares. |
-| `DB_PATH` | dentro de `DATA_DIR` | Caminho alternativo explícito para SQLite. |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / aleatória | Credenciais da conta criada na inicialização. Defina senha forte antes do primeiro arranque. |
-| `STARTING_POINTS` | `0` | XP virtual inicial. Não é saldo de jogo nem crédito monetário. |
-| `CLOCK_MINUTES` | `10` | Tempo por jogador. |
-| `START_TIMEOUT_SECONDS` | `180` | Prazo para os dois participantes entrarem na partida; o cancelamento não altera XP. |
-| `OFFLINE_GRACE_MS` | `4000` | Tolerância a uma queda rápida/recarregamento. |
-| `REVIEW_AFTER_MINUTES` | `10` | Prazo para uma partida interrompida passar a análise da moderação. |
-| `QUEUE_SECONDS` | `60` | Tempo máximo da fila de matchmaking. |
-| `TOURNAMENT_START_TIMEOUT_MINUTES` | `15` | Prazo para iniciar torneios. |
-| `REGISTER_LIMIT_PER_HOUR` | `10` | Limite de registos por endereço IP. |
-| `TRUST_PROXY=1` | desativado | Lê cabeçalhos de IP de proxy inverso confiável. |
-| `COOKIE_SECURE=1` | desativado | Marca cookie de sessão como HTTPS; ative em produção atrás de HTTPS. |
+## O que está implementado
 
-A aplicação foi projetada para uma instância, com presença e fila em memória e base SQLite em armazenamento persistente.
+- **Contas**: registo, login, recuperação por código, perfil, ID único, avatar, histórico, estatísticas, rating.
+- **Menu ☰ único** com os 10 itens: abre ao clicar; fecha com X, clique fora, ESC ou ao escolher uma opção.
+- **Salas** Bronze 100 / Prata 250 / Ouro 500 / Diamante 1.000 pts, espera de 20 ou 30 s controlada pelo servidor;
+  reserva atómica do lugar (duas pessoas nunca ocupam o mesmo).
+- **Emparelhamento automático** por categoria.
+- **Jogo**: Damas Portuguesas, todas as jogadas validadas no servidor. Cada jogador só controla as suas peças
+  (cor atribuída pelo servidor; verifica identidade, cor, vez, validade e estado).
+- **Tela de jogo limpa**: o **único** botão é *Expandir / ecrã inteiro*. Sem desistir, reiniciar ou controlo do adversário.
+- **Reconexão**: perder a ligação não dá vitória a ninguém. O adversário é avisado, os relógios param, e o jogador
+  volta à **mesma partida** com tabuleiro, relógio e vez exatos (automaticamente ao reabrir a aplicação).
+  Sem regresso após `REVIEW_AFTER_MINUTES` → **Em análise**, ninguém é penalizado; a moderação decide
+  (vitória/empate/cancelar/retomar) e fica no registo de auditoria.
+- **Estados**: Em andamento · Interrompida · Aguardando reconexão · Concluída · Empate · Em análise (+ Cancelada).
+- **Torneios gratuitos** e **classificações**.
+- **Antifraude/auditoria**: eventos de segurança, limites de tentativas, denúncias; **nunca** há banimento automático
+  por taxa de vitórias elevada.
+- **Painel administrativo** (`/admin.html`): Dashboard, Utilizadores, Partidas, Salas, Torneios, Classificações,
+  Denúncias, Segurança (eventos + auditoria), Relatórios, Configurações. Papéis: Administrador principal,
+  Moderador, Suporte (só leitura).
+- **Livro-razão de pontos** separado das partidas e resultados (`ENTRADA`, `PREMIO`, `REEMBOLSO_*`, `AJUSTE_ADMIN`, `BONUS_INICIAL`).
+- **PWA** (instalável, service worker que nunca guarda `/api`, `/ws` ou avatares), tema claro/escuro/sistema,
+  responsivo (telemóvel, tablet, PC) sem scroll horizontal.
 
-## Funcionalidades
+## Regras implementadas (Damas Portuguesas, FPDJ 2025)
 
-### Partidas, XP e progressão
+Tabuleiro 8×8, 32 casas escuras numeradas 1–32, 12 peças por jogador, as brancas começam. Peão move-se e
+**captura só para a frente**. Dama voa (qualquer distância, frente e trás). **Captura obrigatória** com lei da
+quantidade e depois da qualidade. Peças capturadas saem no fim do lance. Promoção só se o lance **termina** na
+última fila. Empates: 20 lances de cada lado sem avanço de peão/captura, tripla repetição, regra dos 12 lances
+(3 damas contra 1). Vitória por captura total, bloqueio ou tempo.
 
-- Damas Portuguesas conforme as regras da FPDJ (2025), com validação autoritativa de cada lance pelo servidor.
-- Salas públicas, partida aleatória e matchmaking em tempo real; reconexão preserva tabuleiro, relógios e vez.
-- XP por resultado, fixado no servidor: vitória **25 XP**, empate **10 XP** por participante, participação em derrota **5 XP**. Partidas canceladas antes de iniciar não alteram XP; não há débito ou distribuição entre adversários.
-- Níveis de experiência (250 XP por nível), rating, vitórias, derrotas, empates, sequência atual/melhor e conquistas baseadas em marcos verificáveis.
-- Rankings geral por rating e classificações semanais/mensais por XP obtido no período.
-- Perfil, estatísticas, lista de partidas e replay permanecem disponíveis; o histórico completo é um benefício VIP e a restrição é aplicada no backend. O Premium pode gravar biografia de até 160 caracteres e usar temas especiais; o VIP vê, além do resumo por categoria, métricas detalhadas de resultados e média de lances por partidas concluídas.
+**Nota:** o segundo PDF enviado (manual de jogos de tabuleiro) descreve damas ao estilo brasileiro (peões capturam
+para trás, etc.). Não foi usado; seguiu-se o regulamento FPDJ, como pedido ("regras originais"). O motor está em
+`shared/engine.js` e a variante é uma constante (`VARIANT`), por isso é possível acrescentar outra variante depois.
 
-### Planos e funcionalidades
+## Arquitetura
 
-Os três planos são persistidos na base e os preços podem ser alterados pela administração. As permissões são sempre verificadas no servidor.
+```
+shared/engine.js     Motor de regras (puro, sem dependências). Autoridade no servidor.
+server/              http.js (API REST + estáticos), ws.js (WebSocket RFC 6455), realtime.js (mensagens),
+                     games.js (partidas, relógios, reconexão), lobby.js (salas e fila), tournaments.js,
+                     points.js (livro-razão), auth.js, security.js, notify.js, db.js (SQLite), config.js
+public/              SPA em JavaScript puro (módulos ES), CSS com tokens, PWA; admin.html = painel
+test/                engine.test.js (regras, 19) + server.test.js (integração, 29)
+```
 
-| Plano | Preço padrão | Recursos principais |
-|---|---:|---|
-| Gratuito | **0 MT** | Partidas normais, adversários aleatórios, XP virtual, ranking básico, perfil e funcionalidades essenciais. |
-| Premium | **99 MT/mês** | Pesquisa avançada (nome/rating), limites de pontuação, salas públicas personalizadas, biografia de perfil de até 160 caracteres, temas especiais e estatísticas avançadas. |
-| VIP | **199 MT/mês** | Inclui recursos Premium e salas privadas avançadas com convite/código, tema exclusivo, histórico completo, métricas detalhadas por categoria e emblema especial. |
+Princípios: o **servidor é a única fonte de verdade**; cada jogada leva `gameId`, `moveId` (idempotência) e `ply`
+esperado, com `UNIQUE(game_id, ply)` na base de dados; relógios no servidor (o cliente só os desenha); CSP estrita
+(sem scripts ou estilos inline); verificação de `Origin` em pedidos que alteram dados.
 
-A validade vem do registo de subscrição ativa no servidor. A aplicação rebaixa o acesso para Gratuito ao expirar, mesmo antes da atualização de estado persistido. As salas privadas não aparecem nas listas públicas e exigem código de convite e acesso VIP.
+### Protocolo WebSocket (`/ws`, mensagens JSON)
 
-## Estado e configuração de pagamentos
+Cliente → servidor: `{t:'ping'}`, `{t:'join', gameId}`, `{t:'move', gameId, moveId, ply, path:[casas]}`.
+Servidor → cliente: `hello`, `pong`, `game` (estado completo), `ack` (`moveId`, `ok`), `match`, `notice`, `error`.
 
-**O checkout real ainda não está implementado.** A integração preparada contém registo de tentativas, histórico, contratos de callback e validação HMAC-SHA256, mas falta um adaptador específico para uma conta de comerciante M-Pesa, e-Mola ou outro provedor disponível. Sem o adaptador oficial e credenciais não há cobrança, tentativa fica `not_configured` e o plano não é ativado. O painel não tem confirmação manual.
+### API REST (resumo)
 
-A ativação de um plano exige uma tentativa pendente e uma confirmação válida do backend; uma confirmação é aplicada de modo transacional e idempotente. O endpoint de callback documentado é `POST /api/payments/webhook/:provider`, com header `X-Damas-Signature: sha256=<hex>` e corpo JSON `{ "status":"paid", "paymentId":"...", "providerRef":"..." }`. O HMAC genérico atual **não é automaticamente compatível com qualquer gateway**: o adaptador deve seguir a documentação e o mecanismo de assinatura oficiais do provedor antes de produção.
+`/api/auth/{register,login,logout,recover}`, `/api/me`, `/api/points`, `/api/rooms` (+ `/:id/join`, `/:id/cancel`),
+`/api/queue`, `/api/games/mine`, `/api/games/:id`, `/api/rankings`, `/api/tournaments`, `/api/reports`,
+`/api/admin/*` (com verificação de papel em cada rota).
 
-Variáveis reservadas para a futura integração (não tornam o checkout disponível neste pacote): `PAYMENT_PROVIDER=mpesa|emola`, `PAYMENT_API_URL`, `PAYMENT_API_TOKEN`, `PAYMENT_CHECKOUT_URL` e `PAYMENT_WEBHOOK_SECRET`. Não coloque credenciais no frontend, no repositório, em logs ou em argumentos de terminal. Obtenha credenciais da conta de comerciante do provedor, implemente e teste o adaptador, valide callbacks em ambiente de sandbox e só então habilite cobranças.
+## O que foi testado
 
-Leia [`docs/PAGAMENTOS_E_MIGRACOES.md`](docs/PAGAMENTOS_E_MIGRACOES.md) antes de integrar um provedor ou publicar alterações de schema.
+- `npm test`: **48/48** — regras (incluindo casos do diagrama FPDJ), registo/login/limites, recuperação, CSP,
+  papéis, salas com concorrência (24 entradas simultâneas → exatamente uma partida), emparelhamento, imposição de
+  cor/vez, jogadas duplicadas e atrasadas, desconexão/reconexão com tabuleiro exato, "Em análise" e decisão do
+  moderador com auditoria, cancelamento com reembolso, tempo esgotado, persistência após reinício, torneios, denúncias.
+- Ensaios no Chromium (telemóvel 390 px e PC 1280 px): menu ☰, tela de jogo com um só botão, exclusividade de cor,
+  sincronização de jogadas, modo expandido, aviso de desconexão do adversário, regresso automático à mesma partida
+  após fechar e reabrir o separador, painel admin sem scroll horizontal e sem erros de consola.
 
-## Administração
+## O que NÃO foi testado / precisa de infraestrutura externa
 
-Aceda a `/admin.html`. O painel preserva gestão de contas, partidas, salas abertas (moderadores podem cancelá-las, com auditoria), torneios, denúncias, segurança, auditoria e relatórios; acrescenta edição auditada de preços/estado dos planos, listagem/cancelamento de subscrições, leitura de tentativas e referências de pagamento, e rankings geral/semanal/mensal. Configurações de runtime são apresentadas em modo de leitura porque vêm do ambiente/servidor. Ajustes manuais de XP/rating exigem papel e justificação e são registados na auditoria. Administradores não confirmam pagamentos manualmente.
+- **Dispositivos e navegadores reais** (Android, iPhone/Safari, Firefox, Edge): só foi testado Chromium emulado.
+  Instalação PWA e ecrã inteiro em iOS (usa um modo expandido alternativo) têm de ser validados em aparelhos reais.
+- **Alojamento com HTTPS** e WebSockets persistentes (VPS, Railway, Fly.io…). Ligar `COOKIE_SECURE=1`, `TRUST_PROXY=1`
+  e definir `ADMIN_PASSWORD` (antes do primeiro arranque). O disco tem de ser persistente (SQLite em `DATA_DIR`) e a aplicação corre numa só instância.
+- **Envio real de e-mail/SMS** (recuperação de conta só por código; notificações são internas).
+- **Escala**: para várias instâncias, migrar SQLite → PostgreSQL e o estado em memória (presença, fila) → Redis.
+  O esquema SQL e os módulos estão separados para facilitar essa migração.
+- **Dinheiro real** (M-Pesa, e-Mola, etc.): deliberadamente fora desta versão.
 
-Papéis existentes: suporte (leitura), moderador (gestão de partidas/denúncias) e administrador principal (gestão de planos e parâmetros sensíveis), sujeitos a autorização por rota.
+## Desvios em relação ao documento mestre
 
-## Base de dados e migração
-
-A aplicação usa SQLite, e `server/db.js` mantém migrações versionadas em `schema_migrations`. A migração incluída remove colunas antigas de entrada das tabelas de sala/partida, adiciona campos para convites, XP, sequências, planos, subscrições e pagamentos, preserva contas, rankings e jogos, e converte o saldo virtual líquido legado para uma linha neutra de XP, sem carregar histórico antigo de entradas/prémios para a nova progressão.
-
-**Não execute a migração em produção durante o desenvolvimento.** Antes da implantação, faça cópia de segurança, teste a migração numa cópia isolada do SQLite e confirme a reversibilidade/estratégia de restauração. Os testes deste pacote usam apenas bases de teste ou temporárias.
-
-## Estrutura
-
-- `shared/engine.js`: motor original de regras.
-- `server/`: HTTP/WebSocket, autenticação, partidas, matchmaking/salas, XP, planos, pagamentos e SQLite.
-- `public/`: interface SPA em JavaScript, CSS, painel administrativo e metadados/ícones PWA. No ZIP fonte recebido, o modo autónomo não é ativado pelo cliente.
-- `test/`: regras, integração do servidor e migração de um esquema legado.
-- `docs/`: detalhes de migrações e de integração externa ainda necessária.
-
-A aplicação mantém tokens CSS e componentes/ícones DAMAS MZ existentes, com layout responsivo. Continua a ser necessário validar em dispositivos físicos iOS/Android e browsers além do Chromium.
-
-## Verificações
-
-Execute `npm test` para rodar as verificações de regras, endpoints de contas e sessão, matchmaking concorrente, salas públicas/privadas, jogadas WebSocket, XP e ranking, planos Free/Premium/VIP, expiração, gestão administrativa, torneios, denúncias e migração. Para subir a aplicação com os dados persistidos, defina `DATA_DIR` e `ADMIN_PASSWORD` e execute `npm start`.
+- **Stack**: JavaScript puro, `node:sqlite` e WebSocket próprio em vez de React/Next/Tailwind/Socket.IO/PostgreSQL/Redis,
+  porque neste ambiente não era possível instalar pacotes. Funcionalmente equivalente; a migração está descrita acima.
+- O botão ☰ do cabeçalho continua visível na tela de jogo como navegação global (não é um controlo da partida);
+  no modo expandido o cabeçalho fica oculto.
+- Questões em aberto: existência de desistência e o tempo para "Em análise" (10 min por omissão, configurável).

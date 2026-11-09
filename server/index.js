@@ -8,7 +8,6 @@ import * as auth from './auth.js';
 import * as rt from './realtime.js';
 import * as games from './games.js';
 import * as lobby from './lobby.js';
-import * as plans from './plans.js';
 import './tournaments.js';
 import { acceptUpgrade } from './ws.js';
 import { handler } from './http.js';
@@ -54,8 +53,6 @@ let connSeq = 0;
 export async function startServer(opts = {}) {
   Object.assign(CONFIG, opts);
   db.init(CONFIG.dbPath || path.join(CONFIG.dataDir, 'damas.db'));
-  plans.ensurePlans();
-  plans.expireDue();
   const admin = await auth.ensureAdmin();
   if (admin) {
     console.log('────────────────────────────────────────────────────────');
@@ -101,7 +98,7 @@ export async function startServer(opts = {}) {
   });
 
   const clock = setInterval(() => {
-    try { games.tick(); lobby.expireRooms(); lobby.queueTick(); plans.expireDue(); } catch (e) { console.error('tick:', e); }
+    try { games.tick(); lobby.expireRooms(); lobby.queueTick(); } catch (e) { console.error('tick:', e); }
   }, 1000);
   const heartbeat = setInterval(() => {
     const now = Date.now();

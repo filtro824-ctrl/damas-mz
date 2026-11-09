@@ -10,7 +10,7 @@ export const CONFIG = {
   secureCookie: process.env.COOKIE_SECURE === '1',
   adminUsername: process.env.ADMIN_USERNAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || '',
-  startingPoints: num(process.env.STARTING_POINTS, 0), // XP virtual inicial (apenas progressão)
+  startingPoints: num(process.env.STARTING_POINTS, 5000), // pontos DEMONSTRATIVOS
   clockMs: num(process.env.CLOCK_MINUTES, 10) * 60 * 1000, // tempo total por jogador
   startTimeoutMs: num(process.env.START_TIMEOUT_SECONDS, 180) * 1000, // ambos têm de entrar na partida
   tournamentStartMs: num(process.env.TOURNAMENT_START_TIMEOUT_MINUTES, 15) * 60 * 1000,
@@ -21,10 +21,10 @@ export const CONFIG = {
 };
 
 export const CATEGORIES = {
-  bronze: { id: 'bronze', name: 'Bronze' },
-  prata: { id: 'prata', name: 'Prata' },
-  ouro: { id: 'ouro', name: 'Ouro' },
-  diamante: { id: 'diamante', name: 'Diamante' },
+  bronze: { id: 'bronze', name: 'Bronze', entry: 100 },
+  prata: { id: 'prata', name: 'Prata', entry: 250 },
+  ouro: { id: 'ouro', name: 'Ouro', entry: 500 },
+  diamante: { id: 'diamante', name: 'Diamante', entry: 1000 },
 };
 export const WAIT_OPTIONS = [20, 30];
 
